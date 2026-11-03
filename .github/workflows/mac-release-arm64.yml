@@ -1,0 +1,78 @@
+name: macOS Apple Silicon Release
+
+# Builds a native Apple Silicon (arm64) .app for Sprite Sage with PyInstaller
+# and publishes it as a DMG. Runs on macos-14 (arm64). Torch 1.13.1 ships
+# macOS arm64 wheels for cp310, so a native build is possible without changing
+# the pinned dependency versions.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (shared with the x86_64 build)"
+        required: true
+        default: "v0.2.0-macos"
+      release_name:
+        description: "Human-readable release title"
+        required: false
+        default: "Sprite Sage v0.2.0 (macOS)"
+      adhoc_sign:
+        description: "Ad-hoc codesign the .app and .dmg (no Apple cert required)"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Create virtual environment
+        run: python -m venv venv
+
+      - name: Install project (arm64 wheels, including the two git deps)
+        run: |
+          ./venv/bin/python -m pip install --upgrade pip
+          ./venv/bin/python -m pip install -e ".[dev]"
+
+      - name: Build the macOS .app (arm64)
+        run: ./venv/bin/python -m PyInstaller --clean mac.spec
+
+      - name: Ad-hoc codesign (optional)
+        if: ${{ github.event.inputs.adhoc_sign == 'true' }}
+        run: codesign --force --deep --sign - dist/SpriteSage.app
+
+      - name: Package DMG
+        run: |
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/
+          DMG_STAGE="dmg_stage"
+          rm -rf "$DMG_STAGE"
+          mkdir -p "$DMG_STAGE"
+          cp -R dist/SpriteSage.app "$DMG_STAGE/"
+          ln -s /Applications "$DMG_STAGE/Applications"
+          hdiutil create -volname "Sprite Sage" -srcfolder "$DMG_STAGE" -ov -format UDZO "SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg"
+          if [ "${{ github.event.inputs.adhoc_sign }}" = "true" ]; then
+            codesign --force --sign - "SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg"
+          fi
+          shasum -a 256 "SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg" > checksums-arm64.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.release_name }}
+          files: |
+            SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg
+            checksums-arm64.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
