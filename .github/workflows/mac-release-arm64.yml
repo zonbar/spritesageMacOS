@@ -60,11 +60,11 @@ jobs:
           mkdir -p "$DMG_STAGE"
           cp -R dist/SpriteSage.app "$DMG_STAGE/"
           ln -s /Applications "$DMG_STAGE/Applications"
-          hdiutil create -volname "Sprite Sage" -srcfolder "$DMG_STAGE" -ov -format UDZO "SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg"
+          hdiutil create -volname "Sprite Sage" -srcfolder "$DMG_STAGE" -ov -format UDZO "SpriteSage-${{ github.event.inputs.tag }}-arm64.dmg"
           if [ "${{ github.event.inputs.adhoc_sign }}" = "true" ]; then
-            codesign --force --sign - "SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg"
+            codesign --force --sign - "SpriteSage-${{ github.event.inputs.tag }}-arm64.dmg"
           fi
-          shasum -a 256 "SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg" > checksums-arm64.txt
+          shasum -a 256 "SpriteSage-${{ github.event.inputs.tag }}-arm64.dmg" > checksums-arm64.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -72,7 +72,7 @@ jobs:
           tag_name: ${{ github.event.inputs.tag }}
           name: ${{ github.event.inputs.release_name }}
           files: |
-            SpriteSage-${{ github.event.inputs.tag }}-macos-arm64.dmg
+            SpriteSage-${{ github.event.inputs.tag }}-arm64.dmg
             checksums-arm64.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
