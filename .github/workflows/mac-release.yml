@@ -1,0 +1,74 @@
+name: macOS Release
+
+# Builds a macOS .app for Sprite Sage with PyInstaller and publishes it as a
+# GitHub Release. Runs on macos-13 (Intel x86_64) because Torch 1.13.1 only
+# ships x86_64 wheels for macOS; the resulting app also runs on Apple Silicon
+# via Rosetta 2.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.2.0-macos"
+        required: true
+        default: "v0.2.0-macos"
+      release_name:
+        description: "Human-readable release title"
+        required: false
+        default: "Sprite Sage v0.2.0 (macOS)"
+      adhoc_sign:
+        description: "Ad-hoc codesign the .app (no Apple cert required)"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-13
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Create virtual environment
+        run: python -m venv venv
+
+      - name: Install project (includes the two git-based deps)
+        run: |
+          ./venv/bin/python -m pip install --upgrade pip
+          ./venv/bin/python -m pip install -e ".[dev]"
+
+      - name: Build the macOS .app
+        run: ./venv/bin/python -m PyInstaller --clean mac.spec
+
+      - name: Ad-hoc codesign (optional)
+        if: ${{ github.event.inputs.adhoc_sign == 'true' }}
+        run: codesign --force --deep --sign - dist/SpriteSage.app
+
+      - name: Package release zip
+        run: |
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/
+          cd dist
+          zip -r "../SpriteSage-${{ github.event.inputs.tag }}-macos-x64.zip" \
+            SpriteSage.app LICENSE THIRD_PARTY_LICENSES.md
+          cd ..
+          shasum -a 256 "SpriteSage-${{ github.event.inputs.tag }}-macos-x64.zip" \
+            > checksums.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.release_name }}
+          files: |
+            SpriteSage-${{ github.event.inputs.tag }}-macos-x64.zip
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
